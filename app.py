@@ -15,11 +15,15 @@ application: ApplicationBuilder = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global application
-    application = (
-        ApplicationBuilder()
-        .token(os.environ.get("TELEGRAM_TOKEN"))
-        .build()
-    )
+    try:
+        application = (
+            ApplicationBuilder()
+            .token(os.environ.get("TELEGRAM_TOKEN"))
+            .build()
+        )
+    except Exception as e:
+        print(f"Application build failed: {e}")
+        raise
 
     # Add your handler
     async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
