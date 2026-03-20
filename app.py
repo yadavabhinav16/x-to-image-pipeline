@@ -71,11 +71,6 @@ async def lifespan(app: FastAPI):
     await application.initialize()
     await application.start()
 
-    # Set webhook automatically on startup (optional but convenient)
-    webhook_url = f"{os.environ.get('APP_URL')}/telegram-webhook"
-    await application.bot.set_webhook(url=webhook_url)
-    print(f"Webhook set to: {webhook_url}")
-
     yield  # App runs here
 
     # Shutdown
