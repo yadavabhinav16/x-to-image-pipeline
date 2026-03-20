@@ -8,13 +8,16 @@ def wrap_text(draw, text, x, y, max_width, font, line_height):
     height = 0
     for word in words:
         test_line = line + word + ' '
-        w, _ = draw.textsize(test_line, font=font)
+        # UPDATED: Use textlength instead of textsize for Pillow 10+
+        w = draw.textlength(test_line, font=font)
+        
         if w > max_width and line:
             draw.text((x, y + height), line.strip(), font=font, fill='black')
             line = word + ' '
             height += line_height
         else:
             line = test_line
+            
     draw.text((x, y + height), line.strip(), font=font, fill='black')
     height += line_height
     return height

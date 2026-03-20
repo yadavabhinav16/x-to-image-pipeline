@@ -13,9 +13,12 @@ NITTER_MIRRORS = [
 ]
 
 def scrape_tweet(tweet_id, base_url):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    }
     try:
         url = f"{base_url}/status/{tweet_id}"
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         if not soup.select_one('.tweet-content'):
             return None
