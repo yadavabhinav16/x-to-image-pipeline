@@ -59,7 +59,7 @@ def scrape_thread(tweet_id, level=0, max_levels=3, visited=set(), mirror_index=0
     thread.append(tweet)
     return thread
 
-async def fallback_scrape(tweet_id):   # renamed for clarity
+def fallback_scrape(tweet_id):   # renamed for clarity
     for i, mirror in enumerate(NITTER_MIRRORS):
         try:
             print(f"Trying mirror {i+1}: {mirror}")
