@@ -1,84 +1,114 @@
 import os
 import asyncio
-from flask import Flask, request, jsonify
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import JSONResponse
 import requests
 from telegram import Update
-from telegram.ext import (
-    ApplicationBuilder,
-    MessageHandler,
-    filters,
-    ContextTypes,
-)
+from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from scraper import scrape_thread, fallback_scrape
 from image_generator import generate_thread_image
 
-app = Flask(__name__)
+# Global PTB application
+application: ApplicationBuilder = None
 
-# Global application (we'll build and run it later)
-application = None
-
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    text = update.message.text
-    import re
-    url_match = re.search(r'https://(x\.com|twitter\.com)/[^/]+/status/(\d+)', text)
-    if not url_match:
-        await update.message.reply_text('Invalid X URL.')
-        return
-    tweet_id = url_match.group(2)
-    await update.message.reply_text('Processing thread... ⚽')
-    try:
-        # Primary scrape
-        thread = scrape_thread(tweet_id)
-        if not thread or len(thread) == 0:
-            # Fallback: Call internal endpoint (synchronous requests inside async)
-            response = requests.post(f"{os.environ.get('APP_URL')}/fallback", json={'tweet_id': tweet_id})
-            thread = response.json()
-        if not thread or len(thread) == 0:
-            raise ValueError('Scrape failed.')
-        # Generate image in-memory (this is sync, but fine for low traffic)
-        image_bytes = generate_thread_image(thread)
-        # Send to Telegram
-        await update.message.reply_photo(photo=image_bytes, caption='Your Football Gem! Save & post to IG. #GemsOfFootballTwitter')
-    except Exception as e:
-        print(e)
-        await update.message.reply_text('Error processing. Try again later.')
-
-# Flask routes remain the same
-@app.route('/telegram-webhook', methods=['GET', 'POST'])
-async def webhook():
-    if request.method == 'POST':
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        await application.process_update(update)
-    return 'ok'
-
-@app.route('/fallback', methods=['POST'])
-def fallback():
-    data = request.json
-    tweet_id = data.get('tweet_id')
-    try:
-        thread = fallback_scrape(tweet_id)
-        return jsonify(thread)
-    except Exception as e:
-        return jsonify({'error': 'Fallback failed'}), 500
-
-def run_flask():
-    from waitress import serve
-    serve(app, host='0.0.0.0', port=int(os.environ.get('PORT', 3000)))
-
-if __name__ == '__main__':
-    # Build the application (no Dispatcher!)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global application
     application = (
         ApplicationBuilder()
-        .token(os.environ.get('TELEGRAM_TOKEN'))
+        .token(os.environ.get("TELEGRAM_TOKEN"))
         .build()
     )
 
-    # Add the handler (use filters.TEXT instead of old Filters)
+    # Add your handler
+    async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not update.message or not update.message.text:
+            return
+
+        text = update.message.text.strip()
+        print(f"Received: {text}")  # Debug in Render logs
+
+        import re
+        url_match = re.search(r'https://(x\.com|twitter\.com)/[^/]+/status/(\d+)', text)
+        if not url_match:
+            await update.message.reply_text("Invalid X URL. Send a thread link.")
+            return
+
+        tweet_id = url_match.group(2)
+        await update.message.reply_text("Processing thread... ⚽")
+
+        try:
+            thread = scrape_thread(tweet_id)
+            if not thread or len(thread) == 0:
+                resp = requests.post(
+                    f"{os.environ.get('APP_URL')}/fallback",
+                    json={"tweet_id": tweet_id},
+                    timeout=15
+                )
+                resp.raise_for_status()
+                thread = resp.json()
+
+            if not thread:
+                raise ValueError("No thread scraped")
+
+            image_bytes = generate_thread_image(thread)
+            await update.message.reply_photo(
+                photo=image_bytes,
+                caption="Your Football Gem! Save & post to IG. #GemsOfFootballTwitter"
+            )
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            await update.message.reply_text("Error processing. Try again later.")
+
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # For Render: we run Flask in main thread, but need to start async bot polling or webhook setup
-    # Since we're using webhook (preferred on Render), we don't need polling
-    # But we must set the webhook manually via BotFather or once after deploy
+    # Startup PTB
+    await application.initialize()
+    await application.start()
 
-    # Run Flask synchronously (waitress)
-    run_flask()
+    # Set webhook automatically on startup (optional but convenient)
+    webhook_url = f"{os.environ.get('APP_URL')}/telegram-webhook"
+    await application.bot.set_webhook(url=webhook_url)
+    print(f"Webhook set to: {webhook_url}")
+
+    yield  # App runs here
+
+    # Shutdown
+    await application.stop()
+    await application.shutdown()
+
+app = FastAPI(lifespan=lifespan)
+
+@app.post("/telegram-webhook")
+async def webhook(request: Request):
+    try:
+        json_data = await request.json()
+        update = Update.de_json(json_data, application.bot)
+        if update:
+            await application.process_update(update)
+        return Response(status_code=200)
+    except Exception as e:
+        print(f"Webhook error: {e}")
+        return JSONResponse(status_code=500, content={"detail": "Internal error"})
+
+@app.post("/fallback")
+async def fallback(request: Request):
+    data = await request.json()
+    tweet_id = data.get("tweet_id")
+    try:
+        thread = fallback_scrape(tweet_id)
+        return {"thread": thread or []}
+    except Exception as e:
+        print(f"Fallback error: {e}")
+        return {"error": "Fallback failed"}, 500
+
+@app.get("/")
+@app.get("/health")
+async def health():
+    return {"status": "healthy", "bot": "running"}
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=False)
