@@ -1,25 +1,40 @@
 import requests
 from bs4 import BeautifulSoup
+import random
+import time
 
+# 2026 Active/High-Uptime Mirrors
 NITTER_MIRRORS = [
-    "https://xcancel.com",          # Best right now (97% uptime)
-    "https://nuku.trabun.org",
-    "https://nitter.net",
-    "https://nitter.poast.org",
-    "https://nitter.catsarch.com",
-    "https://nitter.tiekoetter.com",
-    "https://lightbrd.com",
-    "https://nitter.privacyredirect.com",
+    "https://nitter.privacydev.net",
+    "https://nitter.perennialte.ch",
+    "https://nitter.uni-sonia.com",
+    "https://nitter.skane.xyz",
+    "https://nitter.hostux.net",
 ]
 
 def scrape_tweet(tweet_id, base_url):
+    # Mimic a real browser to bypass basic bot detection
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'DNT': '1',
+        'Referer': f"{base_url}/"
     }
+    
     try:
         url = f"{base_url}/status/{tweet_id}"
-        response = requests.get(url, headers=headers, timeout=10)
+        # Add a small random delay so you don't look like a rapid-fire bot
+        time.sleep(random.uniform(1.0, 2.5)) 
+        
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        if response.status_code != 200:
+            print(f"Mirror {base_url} returned status {response.status_code}")
+            return None
+            
         soup = BeautifulSoup(response.text, 'html.parser')
+        # ... (rest of your existing parsing logic)
         if not soup.select_one('.tweet-content'):
             return None
         tweet = {
