@@ -1,7 +1,16 @@
 import requests
 from bs4 import BeautifulSoup
 
-NITTER_MIRRORS = ['https://nitter.net', 'https://nitter.poast.org', 'https://nitter.esmailelbob.xyz']  # Add more for reliability
+NITTER_MIRRORS = [
+    "https://xcancel.com",          # Best right now (97% uptime)
+    "https://nuku.trabun.org",
+    "https://nitter.net",
+    "https://nitter.poast.org",
+    "https://nitter.catsarch.com",
+    "https://nitter.tiekoetter.com",
+    "https://lightbrd.com",
+    "https://nitter.privacyredirect.com",
+]
 
 def scrape_tweet(tweet_id, base_url):
     try:
@@ -50,12 +59,16 @@ def scrape_thread(tweet_id, level=0, max_levels=3, visited=set(), mirror_index=0
     thread.append(tweet)
     return thread
 
-def fallback_scrape(tweet_id):
-    for i in range(1, len(NITTER_MIRRORS)):
+async def fallback_scrape(tweet_id):   # renamed for clarity
+    for i, mirror in enumerate(NITTER_MIRRORS):
         try:
+            print(f"Trying mirror {i+1}: {mirror}")
             thread = scrape_thread(tweet_id, 0, 3, set(), i)
             if thread and len(thread) > 0:
+                print(f"✅ Success on mirror {mirror}")
                 return thread
         except Exception as e:
-            print(f"Fallback mirror {i} failed: {e}")
+            print(f"Mirror {mirror} failed: {e}")
+            continue
+    print("❌ All mirrors failed")
     return []

@@ -45,13 +45,8 @@ async def lifespan(app: FastAPI):
         try:
             thread = scrape_thread(tweet_id)
             if not thread or len(thread) == 0:
-                resp = requests.post(
-                    f"{os.environ.get('APP_URL')}/fallback",
-                    json={"tweet_id": tweet_id},
-                    timeout=15
-                )
-                resp.raise_for_status()
-                thread = resp.json()
+                print("Primary scrape failed → using internal fallback")
+                thread = fallback_scrape(tweet_id)   # direct call, no network
 
             if not thread:
                 raise ValueError("No thread scraped")
