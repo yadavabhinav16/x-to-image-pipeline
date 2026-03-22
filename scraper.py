@@ -98,3 +98,10 @@ def fallback_scrape(tweet_id):
             logger.warning(f"⚠️ {name} failed: {str(e)}")
             continue
     return []
+
+def scrape_thread(tweet_id):
+    """
+    This is the primary entry point called by app.py.
+    It triggers the tiered fallback system.
+    """
+    return fallback_scrape(tweet_id)
